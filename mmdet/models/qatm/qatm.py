@@ -142,24 +142,29 @@ class CreateModel():
         # self.I_feat = None
         # self.I_feat_name = None
 
-    def __call__(self, template, image, image_name):
+    @staticmethod
+    def get_multi_scale_features(feat, scales):
+        return [F.interpolate(feat, scale_factor=s, mode='bilinear', align_corners=True) for s in scales]
+
+    def __call__(self, template, image, image_name, scales=(1.0, )):
         I_feat = self.featex(image)
         T_feat = self.featex(template)
+        T_feats = self.get_multi_scale_features(T_feat, scales)
         # if self.I_feat_name is not image_name:
         #     self.I_feat = self.featex(image)
             # self.I_feat_name = image_name
-        conf_maps = None
-        batchsize_T = T_feat.size()[0]
-        for i in range(batchsize_T):
-            T_feat_i = T_feat[i].unsqueeze(0)
+        conf_maps = []
+        for i in range(len(scales)):
+            T_feat_i = T_feats[i][0].unsqueeze(0)
             I_feat_norm, T_feat_i = MyNormLayer()(I_feat, T_feat_i)
             dist = torch.einsum("xcab,xcde->xabde", I_feat_norm / torch.norm(I_feat_norm, dim=1, keepdim=True),
                                 T_feat_i / torch.norm(T_feat_i, dim=1, keepdim=True))
             conf_map = QATM(self.alpha)(dist)
-            if conf_maps is None:
-                conf_maps = conf_map
-            else:
-                conf_maps = torch.cat([conf_maps, conf_map], dim=0)
+            conf_maps.append(conf_map)
+            # if conf_maps is None:
+            #     conf_maps = conf_map
+            # else:
+            #     conf_maps = torch.cat([conf_maps, conf_map], dim=0)
         return conf_maps
 
 
@@ -325,6 +330,26 @@ def run_one_sample(model, template, image, image_name):
         gray = cv2.resize(gray, (image.size()[-1], image.size()[-2]))
         h = template.size()[-2]
         w = template.size()[-1]
+        score = compute_score(gray, w, h)
+        score[score > -1e-7] = score.min()
+        score = np.exp(score / (h * w))  # reverse number range back after computing geometry average
+        scores.append(score)
+    return np.array(scores)
+
+
+def run_one_sample_multi_scale(model, template, image, image_name, scales=(1.0, )):
+    vals = model(template, image, image_name, scales=scales)
+    if any([v.is_cuda for v in vals]):
+        vals = [v.cpu() for v in vals]
+    vals = [np.log(v.numpy()) for v in vals]
+
+    scores = []
+    for i, s in enumerate(scales):
+        # compute geometry average on score map
+        gray = vals[i][0, :, :, 0]
+        gray = cv2.resize(gray, (image.size()[-1], image.size()[-2]))
+        h = int(template.size()[-2] * s)
+        w = int(template.size()[-1] * s)
         score = compute_score(gray, w, h)
         score[score > -1e-7] = score.min()
         score = np.exp(score / (h * w))  # reverse number range back after computing geometry average

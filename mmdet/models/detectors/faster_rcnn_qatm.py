@@ -19,7 +19,7 @@ from mmdet.core import auto_fp16, get_classes, tensor2imgs
 from mmdet.core import bbox2result
 from mmdet.models import builder
 from mmdet.models.registry import DETECTORS
-from mmdet.models.qatm.qatm import CreateModel, run_one_sample
+from mmdet.models.qatm.qatm import CreateModel, run_one_sample, run_one_sample_multi_scale
 
 logger = logging.getLogger(__name__)
 
@@ -486,21 +486,27 @@ class FasterRCNNTemplateMatcher(BaseTemplateMatcher):
         _template = cv2.resize(_template, tuple(int(s * scale_factor) for s in _template.shape[:2][::-1]))
         _template = self.qatm_transforms(_template)[None].cuda()
 
-        scores = run_one_sample(self.qatm_model, _template, _im, "test")
+        template_scales = (0.6, 0.8, 1.0, 1.25, 1.5)
+        scores = run_one_sample_multi_scale(self.qatm_model, _template, _im, "test", scales=template_scales)
 
-        boxes = nms(scores[0], *_template.shape[2:][::-1], thresh=0.99)
+        boxes = []
+        for i, s in enumerate(template_scales):
+            h = int(_template.shape[2] * s)
+            w = int(_template.shape[3] * s)
+            _bx = nms(scores[i], w, h, thresh=0.99)
+            boxes.append(_bx)
 
-        rois = torch.tensor(boxes.reshape(-1, 4)).float()
-        rois = torch.cat((rois, self.scale_rois(rois, scales=[0.9, 1.1])), dim=0)
+        rois = torch.tensor(np.concatenate(boxes).reshape(-1, 4)).float()
+        # rois = torch.cat((rois, self.scale_rois(rois, scales=[0.9, 1.1])), dim=0)
         rois = torch.cat((torch.tensor([0.0] * len(rois)).reshape(-1, 1), rois), dim=1).to(img.device)
 
-        s = scores[0]
-        s = ((s - s.min()) / (s.max() - s.min()) * 255).astype(np.uint8)
+        # s = scores[0]
+        # s = ((s - s.min()) / (s.max() - s.min()) * 255).astype(np.uint8)
         _tmp_im = img.cpu().numpy()[0].transpose(1, 2, 0)
         _tmp_im = np.clip((_tmp_im * .226 + .44) * 255, 0, 255).astype(np.uint8)
         _tmp_im = cv2.cvtColor(_tmp_im, cv2.COLOR_RGB2GRAY)
         for r in rois:
-            s = cv2.rectangle(s, (int(r[1]), int(r[2])), (int(r[3]), int(r[4])), (255, 0, 0), 3)
+            # s = cv2.rectangle(s, (int(r[1]), int(r[2])), (int(r[3]), int(r[4])), (255, 0, 0), 3)
             _tmp_im = cv2.rectangle(_tmp_im, (int(r[1]), int(r[2])), (int(r[3]), int(r[4])), (0, 255, 0), 1)
 
         x = self.extract_feat(img)
