@@ -1,7 +1,7 @@
 # model settings
 model = dict(
     type='FasterRCNN',
-    pretrained='/mnt/workspace/hrnetv2_w48_imagenet_pretrained.pth',
+    pretrained='/home/rlan/projects/pytorch-detection/checkpoints/hrnet/hrnetv2_w48_imagenet_pretrained.pth',
     backbone=dict(
         type='HRNet',
         extra=dict(
@@ -117,14 +117,13 @@ test_cfg = dict(
     # e.g., nms=dict(type='soft_nms', iou_thr=0.5, min_score=0.05)
 )
 # dataset settings
-dataset_type = 'CocoZipDataset'
-data_root = '/mnt/workspace/data/coco/'
+dataset_type = 'ChinadrinkCocoDataset'
 img_norm_cfg = dict(mean=[123.675, 116.28, 103.53],
                     std=[58.395, 57.12, 57.375], to_rgb=False)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Resize', img_scale=(1333, 800), keep_ratio=True),
+    dict(type='Resize', img_scale=(475, 1000), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
@@ -135,7 +134,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(1333, 800),
+        img_scale=(475, 1000),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
@@ -148,22 +147,22 @@ test_pipeline = [
 ]
 
 data = dict(
-    imgs_per_gpu=2,
-    workers_per_gpu=2,
+    imgs_per_gpu=3,
+    workers_per_gpu=8,
     train=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_train2017.json',
-        img_prefix=data_root + 'train2017/',
+        ann_file='/data2/datasets/clobotics/chinadrink/labels/unit/train/20191122/unit-train.json',
+        img_prefix='/data2/datasets/clobotics/chinadrink/images/unit/',
         pipeline=train_pipeline),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val2017/',
+        ann_file='/data2/datasets/clobotics/chinadrink/labels/unit/val/20190423/unit-val.json',
+        img_prefix='/data2/datasets/clobotics/chinadrink/images/unit/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val2017/',
+        ann_file='/data2/datasets/clobotics/chinadrink/labels/unit/val/20190423/unit-val.json',
+        img_prefix='/data2/datasets/clobotics/chinadrink/images/unit/',
         pipeline=test_pipeline))
 
 # optimizer
@@ -175,7 +174,7 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[16, 22])
+    step=[1, 2])
 checkpoint_config = dict(interval=1)
 # yapf:disable
 log_config = dict(
@@ -186,7 +185,7 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 24
+total_epochs = 4
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/faster_rcnn_hrnetv2p_w48_2x'
