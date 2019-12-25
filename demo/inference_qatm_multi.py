@@ -10,7 +10,7 @@ import cv2
 config_file = '../configs/faster_rcnn_qatm_hrnetv2_w48_2x.py'
 # download the checkpoint from model zoo and put it in `checkpoints/`
 # checkpoint_file = '../checkpoints/faster_rcnn_hrnetv2p_w48_2x_20190820-79fb8bfc.pth'
-checkpoint_file = '/home/rlan/deploy/mmdetection/work_dirs/faster_rcnn_hrnetv2p_w48_2x/epoch_1.pth'
+checkpoint_file = '/home/rlan/deploy/mmdetection/work_dirs/faster_rcnn_hrnetv2p_w48_2x/epoch_3.pth'
 
 # build the model from a config file and a checkpoint file
 model = init_detector(config_file, checkpoint_file, device='cuda:0')
@@ -53,15 +53,17 @@ model = init_detector(config_file, checkpoint_file, device='cuda:0')
 #     cv2.imwrite(str(save_path), _im)
 
 
-save_dir = Path("/tmp/vis/onboard-demo")
-img_dir = Path("/tmp/onboard-demo/search")
-template_dir = Path("/tmp/onboard-demo/template")
+save_dir = Path("/tmp/vis/batch1")
+img_dir = Path("/data2/datasets/clobotics/chinadrink/labgen/batch1/images")
+template_dir = Path("/data2/datasets/clobotics/chinadrink/labgen/batch1/sku")
 paths = list(img_dir.glob("*.jpg")) + list(img_dir.glob("*.JPG"))
 paths = [p for p in paths if not p.name.startswith('.')]
+downscale = 4
 for template_path in tqdm(template_dir.glob("*.jpg")):
     for img_path in tqdm(paths):
         result = inference_template_matcher(model, str(img_path), str(template_path))
         _im = show_result(str(img_path), result, model.CLASSES, show=False)
         save_path = save_dir / template_path.stem / img_path.relative_to(img_dir)
         save_path.parent.mkdir(parents=True, exist_ok=True)
+        _im = cv2.resize(_im, (_im.shape[1] // downscale, _im.shape[0] // downscale))
         cv2.imwrite(str(save_path), _im)

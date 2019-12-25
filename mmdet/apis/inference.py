@@ -199,6 +199,9 @@ def show_result(img,
         class_names=class_names,
         score_thr=score_thr,
         show=show,
+        bbox_color=(0, 0, 255),
+        text_color=(0, 0, 255),
+        thickness=5,
         wait_time=wait_time,
         out_file=out_file)
     if not (show or out_file):
