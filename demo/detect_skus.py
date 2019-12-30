@@ -14,8 +14,20 @@ from tqdm import tqdm
 from sklearn.cluster import DBSCAN
 import fire
 
+from mmdet.core.bbox.bbox_structure import BBox
+
 
 LabelRow = namedtuple("LabelRow", "im_path sku_index xmin ymin xmax ymax")
+
+
+def enlarge_bbox(bbox, im_size, enlarge_by):
+    x_expand, y_expand = bbox.w * enlarge_by / 2, bbox.h * enlarge_by / 2
+    return BBox.from_values(
+        max(0, bbox.xmin - x_expand),
+        max(0, bbox.ymin - y_expand),
+        min(im_size[0], bbox.xmax + x_expand),
+        min(im_size[1], bbox.ymax + y_expand),
+    )
 
 
 def flatten_list_of_list(l):
@@ -52,6 +64,7 @@ def crop(
     detector_conf,
     detector_model_path,
     conf_th=0.3,
+    bbox_enlarged_crop_by=0.15,
     save_to_sub_folders=False,
     append_img_name=False,
 ):
@@ -76,13 +89,18 @@ def crop(
         bboxes = sort_bboxes(bboxes, im_size)
 
         for j, bbox in tqdm(enumerate(bboxes)):
-            _bx = [int(round(c)) for c in bbox]
+            _bx = enlarge_bbox(BBox(bbox), im_size, bbox_enlarged_crop_by)
+            _bx_int = _bx.int_values
             fname = f"{j:0>2}#{im_path.stem}.jpg" if append_img_name else f"{j:0>2}_{i + 1}.jpg"
             if save_to_sub_folders:
                 fname = Path(im_path.stem) / fname
             save_path = result_save_dir / fname
             save_path.parent.mkdir(parents=True, exist_ok=True)
-            cv2.imwrite(str(save_path), im[_bx[1] : _bx[3], _bx[0] : _bx[2], :])
+
+            # enlarge crop each sku in order to give sufficient features for image retrieval
+            cv2.imwrite(str(save_path), im[_bx_int[1] : _bx_int[3], _bx_int[0] : _bx_int[2], :])
+
+            # we save raw bbox output by detector
             label_data.append(LabelRow(str(im_path), str(fname), *to_pct_repr(bbox, im_size)))
 
     pd.DataFrame(label_data).to_csv(result_save_dir / "detection-info.csv", index=False)
